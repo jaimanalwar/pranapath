@@ -10,7 +10,7 @@ A mobile-optimized web app featuring 40 healing frequencies combining chakra ton
 - 3 Additional healing frequencies
 
 ## Live Demo
-Visit: [Your GitHub Pages URL]
+Visit: [[Your GitHub Pages URL]](https://jaimanalwar.github.io/pranapath/)
 
 ## Installation on Mobile
 1. Open the app in your mobile browser
