@@ -7,42 +7,25 @@
     <meta name="description" content="40 healing vibrations for chakra balancing and sound therapy">
     <meta name="theme-color" content="#6366f1">
     <link rel="manifest" href="manifest.json">
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script>
+      window.React = React;
+      window.ReactDOM = ReactDOM;
+    </script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://unpkg.com/lucide-react@latest/dist/umd/lucide-react.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif; }
-        .app-container { min-height: 100vh; background: linear-gradient(135deg, #312e81 0%, #7c3aed 50%, #ec4899 100%); }
     </style>
 </head>
 <body>
     <div id="root"></div>
     
-    <script type="text/babel">
-        const { useState, useRef, useEffect } = React;
-        const { Play, Pause, Square, Clock, Zap, Heart, Settings, Home, List, Timer } = lucideReact;
+    <script type="text/babel" data-presets="env,react">
+        const { useState } = React;
 
-        const HealingVibrationsApp = () => {
-          const [audioContext, setAudioContext] = useState(null);
-          const [currentTone, setCurrentTone] = useState(null);
-          const [isPlaying, setIsPlaying] = useState(false);
-          const [selectedFreq, setSelectedFreq] = useState(null);
-          const [sessionActive, setSessionActive] = useState(false);
-          const [sessionTime, setSessionTime] = useState(15);
-          const [timeRemaining, setTimeRemaining] = useState(0);
-          const [individualDuration, setIndividualDuration] = useState(5);
-          const [currentView, setCurrentView] = useState('home');
-          const [currentIndex, setCurrentIndex] = useState(0);
-          
-          const oscillatorRef = useRef(null);
-          const gainNodeRef = useRef(null);
-          const sessionIntervalRef = useRef(null);
-          const frequencyTimeoutRef = useRef(null);
-          const individualTimeoutRef = useRef(null);
-
-          const frequencies = [
+        const frequencies = [
             // Core Solfeggio Frequencies
             { freq: 174, name: "UT - Foundation", category: "Solfeggio", color: "#8B0000", description: "Pain relief, security, grounding" },
             { freq: 285, name: "RE - Rapid Healing", category: "Solfeggio", color: "#8B0000", description: "Tissue regeneration, cellular healing" },
@@ -103,326 +86,275 @@
             { freq: 10, name: "Alpha State", category: "Healing", color: "#20B2AA", description: "Relaxation, creativity" }
           ];
 
-          useEffect(() => {
-            const initAudio = async () => {
-              try {
-                const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                setAudioContext(ctx);
-              } catch (error) {
-                console.log('Audio context not supported');
-              }
-            };
-            initAudio();
-            
-            return () => {
-              if (audioContext) {
-                audioContext.close();
-              }
-            };
-          }, []);
+        // Group frequencies by category
+        const groupedFrequencies = frequencies.reduce((groups, freq) => {
+          const category = freq.category;
+          if (!groups[category]) {
+            groups[category] = [];
+          }
+          groups[category].push(freq);
+          return groups;
+        }, {});
 
-          const playTone = async (frequency) => {
-            if (!audioContext) return;
-            
-            if (audioContext.state === 'suspended') {
-              await audioContext.resume();
+        let globalAudioContext = null;
+        let currentOscillator = null;
+        let currentGainNode = null;
+        let sequenceTimeout = null;
+
+        const playFrequency = (freq, duration) => {
+          // Stop any currently playing audio
+          if (currentOscillator) {
+            currentGainNode.gain.setValueAtTime(currentGainNode.gain.value, globalAudioContext.currentTime);
+            currentGainNode.gain.exponentialRampToValueAtTime(0.001, globalAudioContext.currentTime + 0.1);
+            currentOscillator.stop(globalAudioContext.currentTime + 0.1);
+            currentOscillator = null;
+            currentGainNode = null;
+          }
+
+          // Create new audio context if needed
+          if (!globalAudioContext) {
+            globalAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+          }
+
+          const oscillator = globalAudioContext.createOscillator();
+          const gainNode = globalAudioContext.createGain();
+
+          oscillator.connect(gainNode);
+          gainNode.connect(globalAudioContext.destination);
+
+          oscillator.type = 'sine';
+          oscillator.frequency.setValueAtTime(freq, globalAudioContext.currentTime);
+
+          oscillator.start();
+          gainNode.gain.setValueAtTime(0.0001, globalAudioContext.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.5, globalAudioContext.currentTime + 0.5);
+
+          // Store current audio for stopping
+          currentOscillator = oscillator;
+          currentGainNode = gainNode;
+
+          // Stop after duration
+          setTimeout(() => {
+            if (currentOscillator === oscillator) {
+              gainNode.gain.setValueAtTime(gainNode.gain.value, globalAudioContext.currentTime);
+              gainNode.gain.exponentialRampToValueAtTime(0.001, globalAudioContext.currentTime + 0.1);
+              oscillator.stop(globalAudioContext.currentTime + 0.1);
+              currentOscillator = null;
+              currentGainNode = null;
             }
+          }, duration * 1000);
+        };
+
+        const stopAllAudio = () => {
+          if (currentOscillator && currentGainNode) {
+            currentGainNode.gain.setValueAtTime(currentGainNode.gain.value, globalAudioContext.currentTime);
+            currentGainNode.gain.exponentialRampToValueAtTime(0.001, globalAudioContext.currentTime + 0.1);
+            currentOscillator.stop(globalAudioContext.currentTime + 0.1);
+            currentOscillator = null;
+            currentGainNode = null;
+          }
+          
+          if (sequenceTimeout) {
+            clearTimeout(sequenceTimeout);
+            sequenceTimeout = null;
+          }
+        };
+
+        const App = () => {
+          const [currentFreq, setCurrentFreq] = useState(null);
+          const [duration, setDuration] = useState(15);
+          const [sequenceDuration, setSequenceDuration] = useState(30);
+          const [isPlaying, setIsPlaying] = useState(false);
+          const [isSequencePlaying, setIsSequencePlaying] = useState(false);
+          const [isLongPlaying, setIsLongPlaying] = useState(false);
+
+          const handlePlay = (freq) => {
+            // Stop any currently playing audio first
+            stopAllAudio();
             
-            stopTone();
-            
-            const oscillator = audioContext.createOscillator();
-            const gainNode = audioContext.createGain();
-            
-            oscillator.type = 'sine';
-            oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
-            
-            gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-            gainNode.gain.linearRampToValueAtTime(0.15, audioContext.currentTime + 0.1);
-            
-            oscillator.connect(gainNode);
-            gainNode.connect(audioContext.destination);
-            
-            oscillator.start();
-            
-            oscillatorRef.current = oscillator;
-            gainNodeRef.current = gainNode;
-            setCurrentTone(frequency);
+            setCurrentFreq(freq);
             setIsPlaying(true);
+            setIsLongPlaying(false);
+            playFrequency(freq, duration);
+            
+            // Reset playing state after duration
+            setTimeout(() => {
+              setIsPlaying(false);
+              setCurrentFreq(null);
+            }, duration * 1000);
           };
 
-          const stopTone = () => {
-            if (oscillatorRef.current) {
-              gainNodeRef.current.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.1);
-              oscillatorRef.current.stop(audioContext.currentTime + 0.1);
-              oscillatorRef.current = null;
-              gainNodeRef.current = null;
-            }
-            setCurrentTone(null);
+          const handleDoubleClick = (freq) => {
+            // Stop any currently playing audio first
+            stopAllAudio();
+            
+            setCurrentFreq(freq);
+            setIsPlaying(true);
+            setIsLongPlaying(true);
+            playFrequency(freq, sequenceDuration);
+            
+            // Reset playing state after sequence duration
+            setTimeout(() => {
+              setIsPlaying(false);
+              setIsLongPlaying(false);
+              setCurrentFreq(null);
+            }, sequenceDuration * 1000);
+          };
+
+          const handleStop = () => {
+            stopAllAudio();
             setIsPlaying(false);
+            setIsSequencePlaying(false);
+            setIsLongPlaying(false);
+            setCurrentFreq(null);
           };
 
-          const startSession = (minutes) => {
-            setSessionTime(minutes);
-            setTimeRemaining(minutes * 60);
-            setSessionActive(true);
-            setCurrentIndex(0);
-            
-            sessionIntervalRef.current = setInterval(() => {
-              setTimeRemaining(prev => {
-                if (prev <= 1) {
-                  endSession();
-                  return 0;
-                }
-                return prev - 1;
-              });
-            }, 1000);
-            
-            playSessionSequence(0, minutes * 60);
+          const handleDurationChange = (newDuration) => {
+            // Stop any currently playing audio
+            handleStop();
+            setDuration(newDuration);
           };
 
-          const playSessionSequence = (index, totalTime) => {
-            if (!sessionActive || index >= frequencies.length) {
-              setCurrentIndex(0);
-              playSessionSequence(0, totalTime);
-              return;
-            }
+          const handleSequenceDurationChange = (newSequenceDuration) => {
+            // Stop any currently playing audio
+            handleStop();
+            setSequenceDuration(newSequenceDuration);
+          };
+
+          const playAllFrequencies = () => {
+            // Stop any currently playing audio first
+            stopAllAudio();
             
-            const timePerFreq = Math.floor(totalTime / frequencies.length);
-            setCurrentIndex(index);
-            setSelectedFreq(frequencies[index]);
-            playTone(frequencies[index].freq);
-            
-            frequencyTimeoutRef.current = setTimeout(() => {
-              if (sessionActive) {
-                playSessionSequence(index + 1, totalTime);
+            setIsSequencePlaying(true);
+            let currentIndex = 0;
+            const startTime = Date.now();
+
+            const playNext = () => {
+              // Check if we've exceeded the total sequence duration
+              if (Date.now() - startTime >= sequenceDuration * 1000) {
+                setIsSequencePlaying(false);
+                setCurrentFreq(null);
+                return;
               }
-            }, timePerFreq * 1000);
+
+              if (currentIndex >= frequencies.length) {
+                setIsSequencePlaying(false);
+                setCurrentFreq(null);
+                return;
+              }
+
+              const freq = frequencies[currentIndex];
+              setCurrentFreq(freq.freq);
+              
+              // Play individual frequency for the duration setting (not sequence duration)
+              playFrequency(freq.freq, duration);
+              
+              currentIndex++;
+              
+              // Schedule next frequency after current one finishes
+              sequenceTimeout = setTimeout(playNext, duration * 1000);
+            };
+
+            playNext();
           };
 
-          const endSession = () => {
-            setSessionActive(false);
-            setTimeRemaining(0);
-            if (sessionIntervalRef.current) {
-              clearInterval(sessionIntervalRef.current);
-            }
-            if (frequencyTimeoutRef.current) {
-              clearTimeout(frequencyTimeoutRef.current);
-            }
-            stopTone();
-          };
-
-          const playIndividual = (freqObj, duration) => {
-            setSelectedFreq(freqObj);
-            playTone(freqObj.freq);
+          return React.createElement('div', { 
+            className: 'p-4 font-sans bg-gradient-to-r from-purple-200 to-indigo-200 min-h-screen' 
+          },
+            React.createElement('h1', { 
+              className: 'text-2xl font-bold text-center mb-6' 
+            }, 'Healing Frequencies by Category'),
             
-            if (individualTimeoutRef.current) {
-              clearTimeout(individualTimeoutRef.current);
-            }
+            React.createElement('div', { className: 'mb-4 text-center flex flex-wrap items-center justify-center gap-2' },
+              React.createElement('label', { className: 'mr-2' }, 'Sound Duration (secs):'),
+              React.createElement('input', {
+                type: 'number',
+                className: 'border rounded px-2 py-1',
+                value: duration,
+                onChange: (e) => handleDurationChange(Number(e.target.value)),
+                min: 5,
+                max: 30
+              }),
+              React.createElement('button', {
+                className: 'ml-2 bg-red-500 text-white rounded px-4 py-2 hover:bg-red-600',
+                onClick: handleStop
+              }, 'Stop')
+            ),
             
-            individualTimeoutRef.current = setTimeout(() => {
-              stopTone();
-            }, duration * 60 * 1000);
-          };
-
-          const formatTime = (seconds) => {
-            const mins = Math.floor(seconds / 60);
-            const secs = seconds % 60;
-            return `${mins}:${secs.toString().padStart(2, '0')}`;
-          };
-
-          const groupedFrequencies = frequencies.reduce((acc, freq) => {
-            if (!acc[freq.category]) acc[freq.category] = [];
-            acc[freq.category].push(freq);
-            return acc;
-          }, {});
-
-          return React.createElement('div', { className: 'min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 text-white' },
-            // Header
-            React.createElement('div', { className: 'bg-black/20 backdrop-blur-lg border-b border-white/20 p-4' },
-              React.createElement('div', { className: 'flex items-center justify-between' },
-                React.createElement('h1', { className: 'text-xl font-bold flex items-center gap-2' },
-                  React.createElement(Heart, { className: 'text-pink-400', size: 24 }),
-                  'Healing Vibrations'
-                ),
-                sessionActive && React.createElement('div', { className: 'text-right' },
-                  React.createElement('div', { className: 'text-sm text-white/80' }, 'Session Time'),
-                  React.createElement('div', { className: 'text-lg font-bold' }, formatTime(timeRemaining))
+            React.createElement('div', { className: 'mb-6 text-center' },
+              React.createElement('label', { className: 'mr-2' }, 'Sequence Duration (secs):'),
+              React.createElement('input', {
+                type: 'number',
+                className: 'border rounded px-2 py-1',
+                value: sequenceDuration,
+                onChange: (e) => handleSequenceDurationChange(Number(e.target.value)),
+                min: 15,
+                max: 60
+              }),
+              React.createElement('button', {
+                className: 'ml-4 px-4 py-2 rounded text-white bg-indigo-500 hover:bg-indigo-600',
+                onClick: playAllFrequencies
+              }, 'Play All')
+            ),
+            
+            React.createElement('div', { className: 'mb-4 text-center text-sm text-gray-600' },
+              'Single click: Play for sound duration | Double click: Play for sequence duration'
+            ),
+            
+            React.createElement('div', { className: 'space-y-8' },
+              Object.entries(groupedFrequencies).map(([category, categoryFrequencies]) =>
+                React.createElement('div', { key: category, className: 'bg-white rounded-lg p-6 shadow-lg' },
+                  React.createElement('h2', { 
+                    className: 'text-xl font-bold mb-4 text-center',
+                    style: { color: categoryFrequencies[0].color }
+                  }, category),
+                  React.createElement('div', { className: 'grid grid-cols-2 md:grid-cols-4 gap-4' },
+                    categoryFrequencies.map((freq, index) => {
+                      const isCurrentlyPlaying = currentFreq === freq.freq;
+                      let buttonClass = 'shadow-md rounded-xl p-4 transition bg-white hover:bg-indigo-100 border-2';
+                      
+                      if (isCurrentlyPlaying) {
+                        if (isLongPlaying) {
+                          buttonClass = 'shadow-md rounded-xl p-4 transition bg-purple-500 text-white hover:bg-purple-600 border-2 border-purple-700';
+                        } else {
+                          buttonClass = 'shadow-md rounded-xl p-4 transition bg-green-500 text-white hover:bg-green-600 border-2 border-green-700';
+                        }
+                      } else {
+                        buttonClass = `shadow-md rounded-xl p-4 transition bg-white hover:bg-indigo-100 border-2`;
+                      }
+                      
+                      return React.createElement('button', {
+                        key: index,
+                        className: buttonClass,
+                        style: { borderColor: freq.color },
+                        onClick: () => handlePlay(freq.freq),
+                        onDoubleClick: () => handleDoubleClick(freq.freq)
+                      },
+                        React.createElement('span', { className: 'block font-semibold' }, freq.name),
+                        React.createElement('span', { className: `block text-sm ${isCurrentlyPlaying ? 'text-white' : 'text-gray-600'}` }, `${freq.freq} Hz`),
+                        React.createElement('span', { className: `block text-xs mt-1 ${isCurrentlyPlaying ? 'text-white' : 'text-gray-500'}` }, freq.description)
+                      );
+                    })
+                  )
                 )
               )
             ),
-
-            // Content
-            React.createElement('div', { className: 'pb-20' },
-              currentView === 'home' && React.createElement('div', { className: 'p-4 space-y-6' },
-                // Session Controls
-                React.createElement('div', { className: 'bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20' },
-                  React.createElement('h2', { className: 'text-xl font-bold mb-4 flex items-center gap-2' },
-                    React.createElement(Timer, { className: 'text-blue-400' }),
-                    'Timed Sessions'
-                  ),
-                  
-                  sessionActive ? React.createElement('div', { className: 'text-center space-y-4' },
-                    React.createElement('div', { className: 'text-2xl font-bold' }, formatTime(timeRemaining)),
-                    React.createElement('div', { className: 'text-sm text-white/80' },
-                      `Playing: ${frequencies[currentIndex]?.name} (${currentIndex + 1}/40)`
-                    ),
-                    React.createElement('div', { className: 'w-full bg-white/20 rounded-full h-2' },
-                      React.createElement('div', { 
-                        className: 'bg-gradient-to-r from-pink-400 to-purple-400 h-2 rounded-full transition-all',
-                        style: { width: `${((sessionTime * 60 - timeRemaining) / (sessionTime * 60)) * 100}%` }
-                      })
-                    ),
-                    React.createElement('button', { 
-                      onClick: endSession,
-                      className: 'w-full bg-red-500 hover:bg-red-600 text-white py-3 rounded-xl font-semibold flex items-center justify-center gap-2'
-                    },
-                      React.createElement(Square, { size: 20 }),
-                      'End Session'
-                    )
-                  ) : React.createElement('div', { className: 'grid grid-cols-2 gap-3' },
-                    [15, 30, 45, 60].map(minutes =>
-                      React.createElement('button', {
-                        key: minutes,
-                        onClick: () => startSession(minutes),
-                        className: 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white py-4 rounded-xl font-semibold transition-all'
-                      }, `${minutes} min`)
-                    )
-                  )
-                ),
-
-                // Quick Access
-                React.createElement('div', { className: 'bg-white/10 backdrop-blur-lg rounded-2xl p-6 border border-white/20' },
-                  React.createElement('h2', { className: 'text-xl font-bold mb-4 flex items-center gap-2' },
-                    React.createElement(Zap, { className: 'text-yellow-400' }),
-                    'Quick Access'
-                  ),
-                  React.createElement('div', { className: 'grid grid-cols-1 gap-3' },
-                    React.createElement('button', {
-                      onClick: () => setCurrentView('solfeggio'),
-                      className: 'bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white py-3 rounded-xl font-semibold'
-                    }, 'Core Solfeggio (9 tones)'),
-                    React.createElement('button', {
-                      onClick: () => setCurrentView('chakras'),
-                      className: 'bg-gradient-to-r from-red-500 to-purple-500 hover:from-red-600 hover:to-purple-600 text-white py-3 rounded-xl font-semibold'
-                    }, 'All Chakras (28 tones)'),
-                    React.createElement('button', {
-                      onClick: () => setCurrentView('all'),
-                      className: 'bg-gradient-to-r from-indigo-500 to-pink-500 hover:from-indigo-600 hover:to-pink-600 text-white py-3 rounded-xl font-semibold'
-                    }, 'All 40 Frequencies')
-                  )
-                ),
-
-                // Current Playing
-                selectedFreq && React.createElement('div', { className: 'bg-white/15 backdrop-blur-lg rounded-2xl p-6 border border-white/30 text-center' },
-                  React.createElement('div', { className: 'text-lg font-bold mb-2' }, selectedFreq.name),
-                  React.createElement('div', { className: 'text-blue-200 mb-2' }, `${selectedFreq.freq} Hz`),
-                  React.createElement('div', { className: 'text-white/80 text-sm' }, selectedFreq.description),
-                  React.createElement('div', { 
-                    className: 'w-8 h-8 rounded-full mx-auto mt-3',
-                    style: { backgroundColor: selectedFreq.color }
-                  }),
-                  React.createElement('button', {
-                    onClick: stopTone,
-                    className: 'mt-4 bg-red-500 hover:bg-red-600 text-white py-2 px-6 rounded-xl font-semibold'
-                  }, 'Stop')
-                )
-              ),
-
-              // Individual Frequency Views
-              (currentView === 'solfeggio' || currentView === 'chakras' || currentView === 'all') && React.createElement('div', { className: 'p-4 space-y-4' },
-                React.createElement('div', { className: 'flex items-center justify-between mb-4' },
-                  React.createElement('button', {
-                    onClick: () => setCurrentView('home'),
-                    className: 'text-white/80 hover:text-white flex items-center gap-2'
-                  }, '← Back'),
-                  React.createElement('div', { className: 'flex items-center gap-2 text-sm' },
-                    React.createElement(Clock, { size: 16 }),
-                    React.createElement('select', {
-                      value: individualDuration,
-                      onChange: (e) => setIndividualDuration(Number(e.target.value)),
-                      className: 'bg-white/20 border border-white/30 rounded px-2 py-1 text-white text-sm'
-                    },
-                      [1,2,3,4,5,6,7,8,9,10].map(min =>
-                        React.createElement('option', { key: min, value: min }, `${min} min`)
-                      )
-                    )
-                  )
-                ),
-
-                Object.entries(groupedFrequencies)
-                  .filter(([category]) => {
-                    if (currentView === 'solfeggio') return category === 'Solfeggio';
-                    if (currentView === 'chakras') return category.includes('Chakra');
-                    return true;
-                  })
-                  .map(([category, freqs]) =>
-                    React.createElement('div', { 
-                      key: category, 
-                      className: 'bg-white/10 backdrop-blur-lg rounded-2xl p-4 border border-white/20' 
-                    },
-                      React.createElement('h3', { className: 'text-lg font-bold mb-3' }, category),
-                      React.createElement('div', { className: 'space-y-2' },
-                        freqs.map((freqObj, index) =>
-                          React.createElement('button', {
-                            key: `${freqObj.freq}-${index}`,
-                            onClick: () => playIndividual(freqObj, individualDuration),
-                            className: `w-full p-3 rounded-xl border transition-all text-left ${
-                              currentTone === freqObj.freq && isPlaying
-                                ? 'border-white bg-white/20'
-                                : 'border-white/30 bg-white/5 hover:bg-white/15'
-                            }`
-                          },
-                            React.createElement('div', { className: 'flex items-center gap-3' },
-                              React.createElement('div', { 
-                                className: 'w-4 h-4 rounded-full flex-shrink-0',
-                                style: { backgroundColor: freqObj.color }
-                              }),
-                              React.createElement('div', { className: 'flex-grow min-w-0' },
-                                React.createElement('div', { className: 'font-semibold text-sm' }, freqObj.name),
-                                React.createElement('div', { className: 'text-blue-200 text-xs' }, `${freqObj.freq} Hz`)
-                              ),
-                              currentTone === freqObj.freq && isPlaying && React.createElement('div', { className: 'flex-shrink-0' },
-                                React.createElement('div', { className: 'w-2 h-2 bg-green-400 rounded-full animate-pulse' })
-                              )
-                            )
-                          )
-                        )
-                      )
-                    )
-                  )
-              )
-            ),
-
-            // Bottom Navigation
-            React.createElement('div', { className: 'fixed bottom-0 left-0 right-0 bg-black/40 backdrop-blur-lg border-t border-white/20' },
-              React.createElement('div', { className: 'flex items-center justify-around py-3' },
-                React.createElement('button', {
-                  onClick: () => setCurrentView('home'),
-                  className: `flex flex-col items-center gap-1 p-2 ${currentView === 'home' ? 'text-white' : 'text-white/60'}`
-                },
-                  React.createElement(Home, { size: 20 }),
-                  React.createElement('span', { className: 'text-xs' }, 'Home')
-                ),
-                React.createElement('button', {
-                  onClick: () => setCurrentView('all'),
-                  className: `flex flex-col items-center gap-1 p-2 ${currentView === 'all' ? 'text-white' : 'text-white/60'}`
-                },
-                  React.createElement(List, { size: 20 }),
-                  React.createElement('span', { className: 'text-xs' }, 'Browse')
-                ),
-                React.createElement('button', {
-                  onClick: stopTone,
-                  className: 'flex flex-col items-center gap-1 p-2 text-white/60 hover:text-white'
-                },
-                  React.createElement(Square, { size: 20 }),
-                  React.createElement('span', { className: 'text-xs' }, 'Stop')
-                )
-              )
+            
+            currentFreq && React.createElement('p', { 
+              className: 'text-center mt-6 text-indigo-800' 
+            }, `Playing: ${currentFreq} Hz ${isLongPlaying ? `(for ${sequenceDuration}s)` : `(for ${duration}s)`}`),
+            
+            (isPlaying || isSequencePlaying) && React.createElement('div', {
+              className: 'text-center mt-4'
+            },
+              React.createElement('div', {
+                className: 'inline-block w-4 h-4 bg-green-500 rounded-full animate-pulse'
+              })
             )
           );
         };
 
-        ReactDOM.render(React.createElement(HealingVibrationsApp), document.getElementById('root'));
+        ReactDOM.render(React.createElement(App), document.getElementById('root'));
     </script>
 </body>
 </html>

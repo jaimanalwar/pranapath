@@ -1,8 +1,8 @@
-x.{
+{
   "name": "Healing Vibrations - 40 Chakra & Solfeggio Frequencies",
   "short_name": "Healing Vibrations",
   "description": "40 healing vibrations for chakra balancing and sound therapy",
-  "start_url": "index.html",
+  "start_url": "./",
   "display": "standalone",
   "background_color": "#312e81",
   "theme_color": "#6366f1",
