@@ -12,6 +12,17 @@
     <script>
       window.React = React;
       window.ReactDOM = ReactDOM;
+      
+      // Register service worker for background audio
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('./sw.js')
+          .then((registration) => {
+            console.log('Service Worker registered successfully');
+          })
+          .catch((error) => {
+            console.log('Service Worker registration failed:', error);
+          });
+      }
     </script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -100,6 +111,18 @@
         let currentOscillator = null;
         let currentGainNode = null;
         let sequenceTimeout = null;
+        let audioSession = null;
+
+        // Configure audio session for background playback
+        const configureAudioSession = () => {
+          if (navigator.mediaSession) {
+            navigator.mediaSession.setActionHandler('play', () => {});
+            navigator.mediaSession.setActionHandler('pause', () => {});
+            navigator.mediaSession.setActionHandler('stop', () => {
+              stopAllAudio();
+            });
+          }
+        };
 
         const playFrequency = (freq, duration) => {
           // Stop any currently playing audio
@@ -114,6 +137,16 @@
           // Create new audio context if needed
           if (!globalAudioContext) {
             globalAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Configure audio context for background playback
+            if (globalAudioContext.state === 'suspended') {
+              globalAudioContext.resume();
+            }
+            
+            // Set audio context options for background playback
+            if (globalAudioContext.audioWorklet) {
+              globalAudioContext.audioWorklet.addModule('data:application/javascript,');
+            }
           }
 
           const oscillator = globalAudioContext.createOscillator();
@@ -133,6 +166,16 @@
           currentOscillator = oscillator;
           currentGainNode = gainNode;
 
+          // Update media session metadata
+          if (navigator.mediaSession) {
+            navigator.mediaSession.metadata = new MediaMetadata({
+              title: `Healing Frequency ${freq} Hz`,
+              artist: 'Healing App',
+              album: 'Sound Therapy'
+            });
+            navigator.mediaSession.playbackState = 'playing';
+          }
+
           // Stop after duration
           setTimeout(() => {
             if (currentOscillator === oscillator) {
@@ -141,6 +184,11 @@
               oscillator.stop(globalAudioContext.currentTime + 0.1);
               currentOscillator = null;
               currentGainNode = null;
+              
+              // Update media session
+              if (navigator.mediaSession) {
+                navigator.mediaSession.playbackState = 'none';
+              }
             }
           }, duration * 1000);
         };
@@ -158,7 +206,31 @@
             clearTimeout(sequenceTimeout);
             sequenceTimeout = null;
           }
+          
+          // Update media session
+          if (navigator.mediaSession) {
+            navigator.mediaSession.playbackState = 'none';
+          }
         };
+
+        // Initialize audio session when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+          configureAudioSession();
+          
+          // Keep audio context alive
+          document.addEventListener('visibilitychange', () => {
+            if (globalAudioContext && globalAudioContext.state === 'suspended') {
+              globalAudioContext.resume();
+            }
+          });
+          
+          // Handle page focus/blur
+          window.addEventListener('focus', () => {
+            if (globalAudioContext && globalAudioContext.state === 'suspended') {
+              globalAudioContext.resume();
+            }
+          });
+        });
 
         const App = () => {
           const [currentFreq, setCurrentFreq] = useState(null);
@@ -258,6 +330,41 @@
             playNext();
           };
 
+          const playCategoryFrequencies = (categoryFrequencies) => {
+            console.log('Starting category play all with', categoryFrequencies.length, 'frequencies');
+            
+            // Stop any currently playing audio first
+            stopAllAudio();
+            
+            setIsSequencePlaying(true);
+            let currentIndex = 0;
+            const startTime = Date.now();
+
+            const playNext = () => {
+              // Check if we've exceeded the total sequence duration
+              if (Date.now() - startTime >= sequenceDuration * 60 * 1000) {
+                console.log('Sequence duration reached, stopping');
+                setIsSequencePlaying(false);
+                setCurrentFreq(null);
+                return;
+              }
+
+              const freq = categoryFrequencies[currentIndex % categoryFrequencies.length];
+              console.log('Playing frequency:', freq.name, freq.freq, 'Hz (index:', currentIndex, ')');
+              setCurrentFreq(freq.freq);
+              
+              // Play individual frequency for the sound duration
+              playFrequency(freq.freq, duration);
+              
+              currentIndex++;
+              
+              // Schedule next frequency after sound duration finishes
+              sequenceTimeout = setTimeout(playNext, duration * 1000);
+            };
+
+            playNext();
+          };
+
           return React.createElement('div', { 
             className: 'p-4 font-sans bg-gradient-to-r from-purple-200 to-indigo-200 min-h-screen' 
           },
@@ -304,10 +411,17 @@
             React.createElement('div', { className: 'space-y-8' },
               Object.entries(groupedFrequencies).map(([category, categoryFrequencies]) =>
                 React.createElement('div', { key: category, className: 'bg-white rounded-lg p-6 shadow-lg' },
-                  React.createElement('h2', { 
-                    className: 'text-xl font-bold mb-4 text-center',
-                    style: { color: categoryFrequencies[0].color }
-                  }, category),
+                  React.createElement('div', { className: 'flex justify-between items-center mb-4' },
+                    React.createElement('h2', { 
+                      className: 'text-xl font-bold text-center flex-1',
+                      style: { color: categoryFrequencies[0].color }
+                    }, category),
+                    React.createElement('button', {
+                      className: 'px-3 py-1 rounded text-white text-sm',
+                      style: { backgroundColor: categoryFrequencies[0].color },
+                      onClick: () => playCategoryFrequencies(categoryFrequencies)
+                    }, 'Play All')
+                  ),
                   React.createElement('div', { className: 'grid grid-cols-2 md:grid-cols-4 gap-4' },
                     categoryFrequencies.map((freq, index) => {
                       const isCurrentlyPlaying = currentFreq === freq.freq;
