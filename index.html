@@ -162,8 +162,8 @@
 
         const App = () => {
           const [currentFreq, setCurrentFreq] = useState(null);
-          const [duration, setDuration] = useState(15);
-          const [sequenceDuration, setSequenceDuration] = useState(30);
+          const [duration, setDuration] = useState(10);
+          const [sequenceDuration, setSequenceDuration] = useState(20);
           const [isPlaying, setIsPlaying] = useState(false);
           const [isSequencePlaying, setIsSequencePlaying] = useState(false);
           const [isLongPlaying, setIsLongPlaying] = useState(false);
@@ -191,14 +191,14 @@
             setCurrentFreq(freq);
             setIsPlaying(true);
             setIsLongPlaying(true);
-            playFrequency(freq, sequenceDuration);
+            playFrequency(freq, sequenceDuration * 60);
             
             // Reset playing state after sequence duration
             setTimeout(() => {
               setIsPlaying(false);
               setIsLongPlaying(false);
               setCurrentFreq(null);
-            }, sequenceDuration * 1000);
+            }, sequenceDuration * 60 * 1000);
           };
 
           const handleStop = () => {
@@ -231,7 +231,7 @@
 
             const playNext = () => {
               // Check if we've exceeded the total sequence duration
-              if (Date.now() - startTime >= sequenceDuration * 1000) {
+              if (Date.now() - startTime >= sequenceDuration * 60 * 1000) {
                 setIsSequencePlaying(false);
                 setCurrentFreq(null);
                 return;
@@ -282,13 +282,13 @@
             ),
             
             React.createElement('div', { className: 'mb-6 text-center' },
-              React.createElement('label', { className: 'mr-2' }, 'Sequence Duration (secs):'),
+              React.createElement('label', { className: 'mr-2' }, 'Sequence Duration (mins):'),
               React.createElement('input', {
                 type: 'number',
                 className: 'border rounded px-2 py-1',
                 value: sequenceDuration,
                 onChange: (e) => handleSequenceDurationChange(Number(e.target.value)),
-                min: 15,
+                min: 5,
                 max: 60
               }),
               React.createElement('button', {
@@ -342,7 +342,7 @@
             
             currentFreq && React.createElement('p', { 
               className: 'text-center mt-6 text-indigo-800' 
-            }, `Playing: ${currentFreq} Hz ${isLongPlaying ? `(for ${sequenceDuration}s)` : `(for ${duration}s)`}`),
+            }, `Playing: ${currentFreq} Hz ${isLongPlaying ? `(for ${sequenceDuration} mins)` : `(for ${duration}s)`}`),
             
             (isPlaying || isSequencePlaying) && React.createElement('div', {
               className: 'text-center mt-4'
